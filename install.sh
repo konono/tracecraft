@@ -104,16 +104,18 @@ else
     info "Installed hook script -> ${DEST_HOOKS}/${HOOK_FILE}"
 fi
 
-# ── 2. Install skill definition (project scope only) ──────────
-if [ "$SCOPE" = "project" ]; then
+# ── 2. Install skill definition ───────────────────────────────
+if [ "$SCOPE" = "global" ]; then
+    DEST_SKILLS="${DEST_BASE}/commands"
+else
     DEST_SKILLS="${DEST_BASE}/skills"
-    mkdir -p "$DEST_SKILLS"
-    if [ -f "${DEST_SKILLS}/${SKILL_FILE}" ] && cmp -s "$SOURCE_SKILL" "${DEST_SKILLS}/${SKILL_FILE}"; then
-        skip "Skill definition already up to date"
-    else
-        cp "$SOURCE_SKILL" "${DEST_SKILLS}/${SKILL_FILE}"
-        info "Installed skill definition -> ${DEST_SKILLS}/${SKILL_FILE}"
-    fi
+fi
+mkdir -p "$DEST_SKILLS"
+if [ -f "${DEST_SKILLS}/${SKILL_FILE}" ] && cmp -s "$SOURCE_SKILL" "${DEST_SKILLS}/${SKILL_FILE}"; then
+    skip "Skill definition already up to date"
+else
+    cp "$SOURCE_SKILL" "${DEST_SKILLS}/${SKILL_FILE}"
+    info "Installed skill definition -> ${DEST_SKILLS}/${SKILL_FILE}"
 fi
 
 # ── 3. Update settings.json ──────────────────────────────────
