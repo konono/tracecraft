@@ -1,0 +1,3 @@
+# tracecraft session journals (keep templates only)
+.tracecraft/[0-9]*
+.tracecraft/journal_*
