@@ -105,7 +105,19 @@ else
     info "Installed hook script -> ${DEST_HOOKS}/${HOOK_FILE}"
 fi
 
-# ── 2. Install skill definition ───────────────────────────────
+# ── 2. Clean up legacy paths ─────────────────────────────────
+# Previous versions installed to different locations; remove them to avoid
+# duplicate skill entries in Claude Code.
+for legacy in \
+    "${DEST_BASE}/commands/${SKILL_DIR}.md" \
+    "${DEST_BASE}/skills/${SKILL_DIR}.md"; do
+    if [ -f "$legacy" ]; then
+        rm "$legacy"
+        info "Removed legacy skill file -> ${legacy}"
+    fi
+done
+
+# ── 3. Install skill definition ───────────────────────────────
 DEST_SKILLS="${DEST_BASE}/skills/${SKILL_DIR}"
 mkdir -p "$DEST_SKILLS"
 if [ -f "${DEST_SKILLS}/${SKILL_FILE}" ] && cmp -s "$SOURCE_SKILL" "${DEST_SKILLS}/${SKILL_FILE}"; then
@@ -115,7 +127,7 @@ else
     info "Installed skill definition -> ${DEST_SKILLS}/${SKILL_FILE}"
 fi
 
-# ── 3. Update settings.json ──────────────────────────────────
+# ── 4. Update settings.json ──────────────────────────────────
 "$PYTHON" - "$DEST_SETTINGS" "$HOOK_CMD" "$HOOK_TIMEOUT" <<'PYEOF'
 import json, os, sys
 
