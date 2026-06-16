@@ -3,7 +3,7 @@
 # セッションIDベースでジャーナルの初期化状態を判定し、未開始なら Claude に通知する
 INPUT=$(cat)
 
-[ -f ".claude/skills/tracecraft.md" ] || exit 0
+[ -f ".claude/skills/tracecraft/SKILL.md" ] || [ -f "$HOME/.claude/skills/tracecraft/SKILL.md" ] || exit 0
 
 # session_id を取得（先頭8文字を短縮IDとして使用）
 SESSION_ID=$(echo "$INPUT" | grep -o '"session_id":"[^"]*"' | cut -d'"' -f4 | cut -c1-8)

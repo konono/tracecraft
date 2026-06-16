@@ -10,12 +10,13 @@ set -eu
 # ── Configuration ──────────────────────────────────────────────
 HOOK_FILE="tracecraft-autostart.sh"
 HOOK_TIMEOUT=3000
-SKILL_FILE="tracecraft.md"
+SKILL_DIR="tracecraft"
+SKILL_FILE="SKILL.md"
 
 # ── Resolve source paths ──────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SOURCE_HOOK="${SCRIPT_DIR}/hooks/${HOOK_FILE}"
-SOURCE_SKILL="${SCRIPT_DIR}/.claude/skills/${SKILL_FILE}"
+SOURCE_SKILL="${SCRIPT_DIR}/.claude/skills/${SKILL_DIR}/${SKILL_FILE}"
 
 # ── Helpers ────────────────────────────────────────────────────
 info() { printf '[tracecraft]  %s\n' "$1"; }
@@ -105,11 +106,7 @@ else
 fi
 
 # ── 2. Install skill definition ───────────────────────────────
-if [ "$SCOPE" = "global" ]; then
-    DEST_SKILLS="${DEST_BASE}/commands"
-else
-    DEST_SKILLS="${DEST_BASE}/skills"
-fi
+DEST_SKILLS="${DEST_BASE}/skills/${SKILL_DIR}"
 mkdir -p "$DEST_SKILLS"
 if [ -f "${DEST_SKILLS}/${SKILL_FILE}" ] && cmp -s "$SOURCE_SKILL" "${DEST_SKILLS}/${SKILL_FILE}"; then
     skip "Skill definition already up to date"
