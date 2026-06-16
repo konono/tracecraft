@@ -1,6 +1,9 @@
 #!/bin/sh
 # tracecraft autostart hook for UserPromptSubmit
 # セッションIDベースでジャーナルの初期化状態を判定し、未開始なら Claude に通知する
+[ "$TRACECRAFT" = "0" ] && exit 0
+[ -f "$HOME/.tracecraft-disabled" ] && [ "$TRACECRAFT" != "1" ] && exit 0
+
 INPUT=$(cat)
 
 [ -f ".claude/skills/tracecraft/SKILL.md" ] || [ -f "$HOME/.claude/skills/tracecraft/SKILL.md" ] || exit 0

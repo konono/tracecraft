@@ -12,11 +12,13 @@ HOOK_FILE="tracecraft-autostart.sh"
 HOOK_TIMEOUT=3000
 SKILL_DIR="tracecraft"
 SKILL_FILE="SKILL.md"
+CLI_NAME="tracecraft"
 
 # ── Resolve source paths ──────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SOURCE_HOOK="${SCRIPT_DIR}/hooks/${HOOK_FILE}"
 SOURCE_SKILL="${SCRIPT_DIR}/.claude/skills/${SKILL_DIR}/${SKILL_FILE}"
+SOURCE_CLI="${SCRIPT_DIR}/bin/${CLI_NAME}"
 
 # ── Helpers ────────────────────────────────────────────────────
 info() { printf '[tracecraft]  %s\n' "$1"; }
@@ -87,6 +89,7 @@ DEST_SETTINGS="${DEST_BASE}/settings.json"
 
 # ── Prerequisite checks ──────────────────────────────────────
 [ -f "$SOURCE_HOOK" ] || err "Hook source not found: ${SOURCE_HOOK}"
+[ -f "$SOURCE_CLI" ] || err "CLI source not found: ${SOURCE_CLI}"
 PYTHON="$(find_python)" || err "Python 3.6+ is required but not found. Install python3 and retry."
 
 printf '\n'
@@ -127,7 +130,18 @@ else
     info "Installed skill definition -> ${DEST_SKILLS}/${SKILL_FILE}"
 fi
 
-# ── 4. Update settings.json ──────────────────────────────────
+# ── 4. Install CLI ───────────────────────────────────────────
+DEST_BIN="${HOME}/.local/bin"
+mkdir -p "$DEST_BIN"
+if [ -f "${DEST_BIN}/${CLI_NAME}" ] && cmp -s "$SOURCE_CLI" "${DEST_BIN}/${CLI_NAME}"; then
+    skip "CLI already up to date"
+else
+    cp "$SOURCE_CLI" "${DEST_BIN}/${CLI_NAME}"
+    chmod +x "${DEST_BIN}/${CLI_NAME}"
+    info "Installed CLI -> ${DEST_BIN}/${CLI_NAME}"
+fi
+
+# ── 5. Update settings.json ──────────────────────────────────
 "$PYTHON" - "$DEST_SETTINGS" "$HOOK_CMD" "$HOOK_TIMEOUT" <<'PYEOF'
 import json, os, sys
 

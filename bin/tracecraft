@@ -1,0 +1,38 @@
+#!/bin/sh
+# tracecraft CLI — toggle tracecraft on/off
+set -eu
+
+FLAG="$HOME/.tracecraft-disabled"
+
+usage() {
+    printf 'Usage: tracecraft <on|off|status>\n\n'
+    printf '  on      Enable tracecraft (default)\n'
+    printf '  off     Disable tracecraft\n'
+    printf '  status  Show current state\n\n'
+    printf 'One-shot override: TRACECRAFT=0 aw claude\n'
+}
+
+case "${1:-}" in
+    on)
+        rm -f "$FLAG"
+        printf 'tracecraft: enabled\n'
+        ;;
+    off)
+        touch "$FLAG"
+        printf 'tracecraft: disabled\n'
+        ;;
+    status)
+        if [ -f "$FLAG" ]; then
+            printf 'tracecraft: disabled\n'
+        else
+            printf 'tracecraft: enabled\n'
+        fi
+        ;;
+    -h|--help)
+        usage
+        ;;
+    *)
+        usage
+        exit 1
+        ;;
+esac
