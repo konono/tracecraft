@@ -13,5 +13,5 @@ SESSION_ID=$(echo "$INPUT" | grep -o '"session_id":"[^"]*"' | cut -d'"' -f4 | cu
 ls .tracecraft/*_${SESSION_ID}*/worklog.md >/dev/null 2>&1 && exit 0
 
 cat <<MSG
-tracecraft: ジャーナル未開始。ユーザーのメッセージに応答する前に、まず Skill ツールで tracecraft start を実行してセッション ${SESSION_ID} のジャーナルを開始してください。これは必須です。セッションID: ${SESSION_ID}
+tracecraft: ジャーナル未開始。ユーザーのメッセージに応答する前に、まず Skill ツールで tracecraft start を実行してセッション ${SESSION_ID} のジャーナルを開始してください。ジャーナル初期化後は必ずユーザーの元のメッセージ（プロンプト）の処理を続行すること。ジャーナル作成だけで応答を終えてはならない。セッションID: ${SESSION_ID}
 MSG
