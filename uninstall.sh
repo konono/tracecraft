@@ -8,7 +8,8 @@
 set -eu
 
 # ── Configuration ──────────────────────────────────────────────
-HOOK_FILE="tracecraft-autostart.sh"
+AUTOSTART_HOOK="tracecraft-autostart.sh"
+STOP_HOOK="tracecraft-stop.sh"
 SKILL_FILE="tracecraft.md"
 
 # ── Helpers ────────────────────────────────────────────────────
@@ -79,7 +80,7 @@ info "Scope: ${SCOPE}"
 info "Target: ${DEST_BASE}"
 printf '\n'
 
-# ── 1. Remove hook entry from settings.json ──────────────────
+# ── 1. Remove hook entries from settings.json ────────────────
 if [ -f "$DEST_SETTINGS" ]; then
     PYTHON="$(find_python)" || err "Python 3.6+ is required but not found."
 
@@ -87,55 +88,77 @@ if [ -f "$DEST_SETTINGS" ]; then
 import json, sys
 
 settings_path = sys.argv[1]
-commands_to_remove = {
+
+autostart_commands = {
     "sh ~/.claude/hooks/tracecraft-autostart.sh",
     "bash ~/.claude/hooks/tracecraft-autostart.sh",
     "sh .claude/hooks/tracecraft-autostart.sh",
     "bash .claude/hooks/tracecraft-autostart.sh",
 }
 
+stop_commands = {
+    "sh ~/.claude/hooks/tracecraft-stop.sh",
+    "bash ~/.claude/hooks/tracecraft-stop.sh",
+    "sh .claude/hooks/tracecraft-stop.sh",
+    "bash .claude/hooks/tracecraft-stop.sh",
+}
+
 with open(settings_path) as f:
     settings = json.load(f)
 
 hooks = settings.get("hooks", {})
-ups = hooks.get("UserPromptSubmit", [])
 
-removed = False
-for matcher in ups:
+removed_autostart = False
+for matcher in hooks.get("UserPromptSubmit", []):
     original = matcher.get("hooks", [])
-    filtered = [h for h in original if h.get("command") not in commands_to_remove]
+    filtered = [h for h in original if h.get("command") not in autostart_commands]
     if len(filtered) < len(original):
-        removed = True
+        removed_autostart = True
         matcher["hooks"] = filtered
 
-# Clean up empty structures
-if ups:
-    hooks["UserPromptSubmit"] = [m for m in ups if m.get("hooks")]
-    if not hooks["UserPromptSubmit"]:
-        del hooks["UserPromptSubmit"]
-    if not hooks:
-        del settings["hooks"]
+removed_stop = False
+for matcher in hooks.get("Stop", []):
+    original = matcher.get("hooks", [])
+    filtered = [h for h in original if h.get("command") not in stop_commands]
+    if len(filtered) < len(original):
+        removed_stop = True
+        matcher["hooks"] = filtered
+
+for event in ["UserPromptSubmit", "Stop"]:
+    if event in hooks:
+        hooks[event] = [m for m in hooks[event] if m.get("hooks")]
+        if not hooks[event]:
+            del hooks[event]
+if not hooks:
+    del settings["hooks"]
 
 with open(settings_path, "w") as f:
     json.dump(settings, f, indent=2, ensure_ascii=False)
     f.write("\n")
 
-if removed:
-    print("[tracecraft]  Removed hook entry from settings.json")
+if removed_autostart:
+    print("[tracecraft]  Removed autostart hook from settings.json")
 else:
-    print("[tracecraft]  No hook entry found in settings.json (skipped)")
+    print("[tracecraft]  No autostart hook found in settings.json (skipped)")
+
+if removed_stop:
+    print("[tracecraft]  Removed stop hook from settings.json")
+else:
+    print("[tracecraft]  No stop hook found in settings.json (skipped)")
 PYEOF
 else
     skip "No settings.json found at ${DEST_SETTINGS}"
 fi
 
-# ── 2. Remove hook script ────────────────────────────────────
-if [ -f "${DEST_HOOKS}/${HOOK_FILE}" ]; then
-    rm "${DEST_HOOKS}/${HOOK_FILE}"
-    info "Removed hook script: ${DEST_HOOKS}/${HOOK_FILE}"
-else
-    skip "Hook script not found at ${DEST_HOOKS}/${HOOK_FILE}"
-fi
+# ── 2. Remove hook scripts ──────────────────────────────────
+for hook in "$AUTOSTART_HOOK" "$STOP_HOOK"; do
+    if [ -f "${DEST_HOOKS}/${hook}" ]; then
+        rm "${DEST_HOOKS}/${hook}"
+        info "Removed hook script: ${DEST_HOOKS}/${hook}"
+    else
+        skip "Hook script not found at ${DEST_HOOKS}/${hook}"
+    fi
+done
 
 # ── 3. Remove skill definition (project scope only) ──────────
 if [ "$SCOPE" = "project" ]; then
@@ -146,6 +169,16 @@ if [ "$SCOPE" = "project" ]; then
     else
         skip "Skill definition not found at ${DEST_SKILL}"
     fi
+fi
+
+# ── 4. Clean up temp files ───────────────────────────────────
+if [ -d "/tmp/tracecraft-checkpoint" ]; then
+    rm -rf "/tmp/tracecraft-checkpoint"
+    info "Cleaned up temp files: /tmp/tracecraft-checkpoint"
+fi
+if [ -d "/tmp/tracecraft-stop" ]; then
+    rm -rf "/tmp/tracecraft-stop"
+    info "Cleaned up temp files: /tmp/tracecraft-stop"
 fi
 
 printf '\n'
