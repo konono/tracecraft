@@ -141,10 +141,16 @@ done
 
 # ── 3. Remove skill definition (project scope only) ──────────
 if [ "$SCOPE" = "project" ]; then
-    DEST_SKILL="${DEST_BASE}/skills/${SKILL_FILE}"
-    if [ -f "$DEST_SKILL" ]; then
-        rm "$DEST_SKILL"
-        info "Removed skill definition: ${DEST_SKILL}"
+    DEST_SKILL_DIR="${DEST_BASE}/skills/tracecraft"
+    if [ -d "$DEST_SKILL_DIR" ]; then
+        rm -rf "$DEST_SKILL_DIR"
+        info "Removed skill directory: ${DEST_SKILL_DIR}"
+    fi
+    # Legacy flat file
+    DEST_SKILL_LEGACY="${DEST_BASE}/skills/${SKILL_FILE}"
+    if [ -f "$DEST_SKILL_LEGACY" ]; then
+        rm "$DEST_SKILL_LEGACY"
+        info "Removed legacy skill: ${DEST_SKILL_LEGACY}"
     fi
 fi
 
