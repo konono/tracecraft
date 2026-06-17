@@ -1,26 +1,31 @@
 #!/bin/sh
 # tracecraft installer — POSIX sh, idempotent, preserves existing hooks.
 # Usage:
-#   sh install.sh                  # interactive (scope + variant)
+#   sh install.sh                  # interactive (scope + timing + model)
 #   sh install.sh --global         # install to ~/.claude/ (all projects)
 #   sh install.sh --project        # install to current project's .claude/
 #   sh install.sh --project --target /path/to/project
-#   sh install.sh --variant test   # with deferred auto-checkpoint (default)
-#   sh install.sh --variant main   # without auto-checkpoint (original behavior)
+#   sh install.sh --timing every   # checkpoint timing (off|every|precompact|interval:N)
+#   sh install.sh --model haiku    # checkpoint agent model (haiku|sonnet|opus)
+#   sh install.sh --lock-timeout 90  # lock timeout in seconds
 set -eu
 
 # ── Configuration ──────────────────────────────────────────────
 AUTOSTART_HOOK="tracecraft-autostart.sh"
 STOP_HOOK="tracecraft-stop.sh"
+PRECOMPACT_HOOK="tracecraft-precompact.sh"
 HOOK_TIMEOUT=3000
 SKILL_DIR="tracecraft"
 SKILL_FILE="SKILL.md"
 CLI_NAME="tracecraft"
+CONFIG_FILE="$HOME/.tracecraft-config"
 
 # ── Resolve source paths ──────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SOURCE_AUTOSTART="${SCRIPT_DIR}/hooks/${AUTOSTART_HOOK}"
 SOURCE_STOP="${SCRIPT_DIR}/hooks/${STOP_HOOK}"
+SOURCE_PRECOMPACT="${SCRIPT_DIR}/hooks/${PRECOMPACT_HOOK}"
+SOURCE_SKILL="${SCRIPT_DIR}/.claude/skills/${SKILL_DIR}/${SKILL_FILE}"
 SOURCE_CLI="${SCRIPT_DIR}/bin/${CLI_NAME}"
 
 # ── Helpers ────────────────────────────────────────────────────
@@ -40,10 +45,22 @@ find_python() {
     return 1
 }
 
+# ── Load existing config defaults ─────────────────────────────
+EXISTING_MODEL=""
+EXISTING_TIMING=""
+EXISTING_LOCK_TIMEOUT=""
+if [ -f "$CONFIG_FILE" ]; then
+    EXISTING_MODEL=$(grep '^TRACECRAFT_MODEL=' "$CONFIG_FILE" 2>/dev/null | cut -d= -f2 || true)
+    EXISTING_TIMING=$(grep '^TRACECRAFT_TIMING=' "$CONFIG_FILE" 2>/dev/null | cut -d= -f2 || true)
+    EXISTING_LOCK_TIMEOUT=$(grep '^TRACECRAFT_LOCK_TIMEOUT=' "$CONFIG_FILE" 2>/dev/null | cut -d= -f2 || true)
+fi
+
 # ── Argument parsing ──────────────────────────────────────────
 SCOPE=""
 TARGET=""
-VARIANT=""
+OPT_TIMING=""
+OPT_MODEL=""
+OPT_LOCK_TIMEOUT=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -52,18 +69,45 @@ while [ $# -gt 0 ]; do
         --target)
             [ $# -ge 2 ] || err "--target requires a path argument"
             TARGET="$2"; shift 2 ;;
-        --variant)
-            [ $# -ge 2 ] || err "--variant requires 'main' or 'test'"
-            VARIANT="$2"; shift 2 ;;
+        --timing)
+            [ $# -ge 2 ] || err "--timing requires a value (off|every|precompact|interval:N)"
+            OPT_TIMING="$2"; shift 2 ;;
+        --model)
+            [ $# -ge 2 ] || err "--model requires a value (haiku|sonnet|opus)"
+            OPT_MODEL="$2"; shift 2 ;;
+        --lock-timeout)
+            [ $# -ge 2 ] || err "--lock-timeout requires a number"
+            OPT_LOCK_TIMEOUT="$2"; shift 2 ;;
         -h|--help)
-            printf 'Usage: sh install.sh [--global | --project [--target <path>]] [--variant main|test]\n\n'
-            printf 'Variants:\n'
-            printf '  main  — Original behavior (UserPromptSubmit autostart only)\n'
-            printf '  test  — Deferred auto-checkpoint via Stop + UserPromptSubmit hooks\n'
+            printf 'Usage: sh install.sh [--global | --project [--target <path>]] [--timing T] [--model M] [--lock-timeout N]\n\n'
+            printf 'Timing modes:\n'
+            printf '  off         — No auto-checkpoint (manual /tracecraft finalize only)\n'
+            printf '  every       — Checkpoint every turn (default)\n'
+            printf '  precompact  — Checkpoint on context compression only\n'
+            printf '  interval:N  — Checkpoint every N turns\n\n'
+            printf 'Models: haiku (default), sonnet, opus\n'
             exit 0 ;;
         *) err "Unknown option: $1" ;;
     esac
 done
+
+# ── Resolve final config values (CLI > existing config > defaults) ──
+FINAL_MODEL="${OPT_MODEL:-${EXISTING_MODEL:-haiku}}"
+FINAL_TIMING="${OPT_TIMING:-${EXISTING_TIMING:-every}}"
+FINAL_LOCK_TIMEOUT="${OPT_LOCK_TIMEOUT:-${EXISTING_LOCK_TIMEOUT:-90}}"
+
+# Validate timing
+case "$FINAL_TIMING" in
+    off|every|precompact) ;;
+    interval:*) ;;
+    *) err "Invalid timing: $FINAL_TIMING (must be off|every|precompact|interval:N)" ;;
+esac
+
+# Validate model
+case "$FINAL_MODEL" in
+    haiku|sonnet|opus) ;;
+    *) err "Invalid model: $FINAL_MODEL (must be haiku|sonnet|opus)" ;;
+esac
 
 # ── Interactive scope selection ────────────────────────────────
 if [ -z "$SCOPE" ]; then
@@ -79,31 +123,22 @@ if [ -z "$SCOPE" ]; then
     esac
 fi
 
-# ── Interactive variant selection ──────────────────────────────
-if [ -z "$VARIANT" ]; then
-    printf '\nWhich variant?\n\n'
-    printf '  1) test — Auto-checkpoint + auto-finalize (recommended)\n'
-    printf '  2) main — Original behavior (manual finalize)\n\n'
-    printf 'Select [1/2]: '
-    read -r vchoice
-    case "$vchoice" in
-        1|test)  VARIANT="test" ;;
-        2|main)  VARIANT="main" ;;
-        *) err "Invalid selection: $vchoice" ;;
+# ── Interactive timing selection (if not specified) ────────────
+if [ -z "$OPT_TIMING" ] && [ -z "$EXISTING_TIMING" ]; then
+    printf '\nCheckpoint timing?\n\n'
+    printf '  1) every       — Every turn (default)\n'
+    printf '  2) precompact  — On context compression only\n'
+    printf '  3) interval:5  — Every 5 turns\n'
+    printf '  4) off         — Manual only\n\n'
+    printf 'Select [1/2/3/4]: '
+    read -r tchoice
+    case "$tchoice" in
+        1|every)      FINAL_TIMING="every" ;;
+        2|precompact) FINAL_TIMING="precompact" ;;
+        3|interval*)  FINAL_TIMING="interval:5" ;;
+        4|off)        FINAL_TIMING="off" ;;
+        *) FINAL_TIMING="every" ;;
     esac
-fi
-
-case "$VARIANT" in
-    main|test) ;;
-    *) err "Invalid variant: $VARIANT (must be 'main' or 'test')" ;;
-esac
-
-# ── Resolve skill source based on variant ─────────────────────
-if [ "$VARIANT" = "main" ]; then
-    SOURCE_SKILL="${SCRIPT_DIR}/.claude/skills/${SKILL_DIR}/SKILL.main.md"
-    [ -f "$SOURCE_SKILL" ] || SOURCE_SKILL="${SCRIPT_DIR}/.claude/skills/${SKILL_DIR}/${SKILL_FILE}"
-else
-    SOURCE_SKILL="${SCRIPT_DIR}/.claude/skills/${SKILL_DIR}/${SKILL_FILE}"
 fi
 
 # ── Determine destination paths ───────────────────────────────
@@ -111,6 +146,7 @@ if [ "$SCOPE" = "global" ]; then
     DEST_BASE="${HOME}/.claude"
     AUTOSTART_CMD="sh ~/.claude/hooks/${AUTOSTART_HOOK}"
     STOP_CMD="sh ~/.claude/hooks/${STOP_HOOK}"
+    PRECOMPACT_CMD="sh ~/.claude/hooks/${PRECOMPACT_HOOK}"
 else
     if [ -n "$TARGET" ]; then
         DEST_BASE="${TARGET}/.claude"
@@ -119,6 +155,7 @@ else
     fi
     AUTOSTART_CMD="sh .claude/hooks/${AUTOSTART_HOOK}"
     STOP_CMD="sh .claude/hooks/${STOP_HOOK}"
+    PRECOMPACT_CMD="sh .claude/hooks/${PRECOMPACT_HOOK}"
 fi
 
 DEST_HOOKS="${DEST_BASE}/hooks"
@@ -126,67 +163,69 @@ DEST_SETTINGS="${DEST_BASE}/settings.json"
 
 # ── Prerequisite checks ──────────────────────────────────────
 [ -f "$SOURCE_AUTOSTART" ] || err "Autostart hook source not found: ${SOURCE_AUTOSTART}"
+[ -f "$SOURCE_STOP" ] || err "Stop hook source not found: ${SOURCE_STOP}"
+[ -f "$SOURCE_PRECOMPACT" ] || err "PreCompact hook source not found: ${SOURCE_PRECOMPACT}"
 [ -f "$SOURCE_SKILL" ] || err "Skill source not found: ${SOURCE_SKILL}"
 [ -f "$SOURCE_CLI" ] || err "CLI source not found: ${SOURCE_CLI}"
 PYTHON="$(find_python)" || err "Python 3.6+ is required but not found. Install python3 and retry."
 
 printf '\n'
 info "Scope: ${SCOPE}"
-info "Variant: ${VARIANT}"
+info "Timing: ${FINAL_TIMING}"
+info "Model: ${FINAL_MODEL}"
+info "Lock timeout: ${FINAL_LOCK_TIMEOUT}s"
 info "Destination: ${DEST_BASE}"
 printf '\n'
 
-# ── 1. Install hook scripts ──────────────────────────────────
+# ── 1. Write config file ────────────────────────────────────
+cat > "$CONFIG_FILE" <<CONF
+TRACECRAFT_MODEL=${FINAL_MODEL}
+TRACECRAFT_TIMING=${FINAL_TIMING}
+TRACECRAFT_LOCK_TIMEOUT=${FINAL_LOCK_TIMEOUT}
+CONF
+info "Config written -> ${CONFIG_FILE}"
+
+# ── 2. Install hook scripts ──────────────────────────────────
 mkdir -p "$DEST_HOOKS"
 
-# Autostart hook (both variants — test variant has checkpoint logic integrated)
-if [ -f "${DEST_HOOKS}/${AUTOSTART_HOOK}" ] && cmp -s "$SOURCE_AUTOSTART" "${DEST_HOOKS}/${AUTOSTART_HOOK}"; then
-    skip "Autostart hook already up to date"
-else
-    cp "$SOURCE_AUTOSTART" "${DEST_HOOKS}/${AUTOSTART_HOOK}"
-    chmod +x "${DEST_HOOKS}/${AUTOSTART_HOOK}"
-    info "Installed autostart hook -> ${DEST_HOOKS}/${AUTOSTART_HOOK}"
-fi
-
-# Stop hook (test variant only — silent flag-setter)
-if [ "$VARIANT" = "test" ]; then
-    if [ -f "$SOURCE_STOP" ]; then
-        if [ -f "${DEST_HOOKS}/${STOP_HOOK}" ] && cmp -s "$SOURCE_STOP" "${DEST_HOOKS}/${STOP_HOOK}"; then
-            skip "Stop hook already up to date"
-        else
-            cp "$SOURCE_STOP" "${DEST_HOOKS}/${STOP_HOOK}"
-            chmod +x "${DEST_HOOKS}/${STOP_HOOK}"
-            info "Installed stop hook -> ${DEST_HOOKS}/${STOP_HOOK}"
-        fi
-    fi
-else
-    if [ -f "${DEST_HOOKS}/${STOP_HOOK}" ]; then
-        rm "${DEST_HOOKS}/${STOP_HOOK}"
-        info "Removed stop hook (main variant) -> ${DEST_HOOKS}/${STOP_HOOK}"
-    fi
-fi
-
-# ── 2. Clean up legacy paths ─────────────────────────────────
-for legacy in \
-    "${DEST_BASE}/commands/${SKILL_DIR}.md" \
-    "${DEST_BASE}/skills/${SKILL_DIR}.md"; do
-    if [ -f "$legacy" ]; then
-        rm "$legacy"
-        info "Removed legacy skill file -> ${legacy}"
+for src_dst in \
+    "${SOURCE_AUTOSTART}:${DEST_HOOKS}/${AUTOSTART_HOOK}:Autostart" \
+    "${SOURCE_STOP}:${DEST_HOOKS}/${STOP_HOOK}:Stop" \
+    "${SOURCE_PRECOMPACT}:${DEST_HOOKS}/${PRECOMPACT_HOOK}:PreCompact"; do
+    src=$(echo "$src_dst" | cut -d: -f1)
+    dst=$(echo "$src_dst" | cut -d: -f2)
+    label=$(echo "$src_dst" | cut -d: -f3)
+    if [ -f "$dst" ] && cmp -s "$src" "$dst"; then
+        skip "${label} hook already up to date"
+    else
+        cp "$src" "$dst"
+        chmod +x "$dst"
+        info "Installed ${label} hook -> ${dst}"
     fi
 done
 
-# ── 3. Install skill definition ───────────────────────────────
+# ── 3. Clean up legacy paths ─────────────────────────────────
+for legacy in \
+    "${DEST_BASE}/commands/${SKILL_DIR}.md" \
+    "${DEST_BASE}/skills/${SKILL_DIR}.md" \
+    "${DEST_BASE}/skills/${SKILL_DIR}/SKILL.main.md"; do
+    if [ -f "$legacy" ]; then
+        rm "$legacy"
+        info "Removed legacy file -> ${legacy}"
+    fi
+done
+
+# ── 4. Install skill definition ───────────────────────────────
 DEST_SKILLS="${DEST_BASE}/skills/${SKILL_DIR}"
 mkdir -p "$DEST_SKILLS"
 if [ -f "${DEST_SKILLS}/${SKILL_FILE}" ] && cmp -s "$SOURCE_SKILL" "${DEST_SKILLS}/${SKILL_FILE}"; then
     skip "Skill definition already up to date"
 else
     cp "$SOURCE_SKILL" "${DEST_SKILLS}/${SKILL_FILE}"
-    info "Installed skill definition (${VARIANT}) -> ${DEST_SKILLS}/${SKILL_FILE}"
+    info "Installed skill definition -> ${DEST_SKILLS}/${SKILL_FILE}"
 fi
 
-# ── 4. Install CLI ───────────────────────────────────────────
+# ── 5. Install CLI ───────────────────────────────────────────
 DEST_BIN="${HOME}/.local/bin"
 mkdir -p "$DEST_BIN"
 if [ -f "${DEST_BIN}/${CLI_NAME}" ] && cmp -s "$SOURCE_CLI" "${DEST_BIN}/${CLI_NAME}"; then
@@ -197,15 +236,15 @@ else
     info "Installed CLI -> ${DEST_BIN}/${CLI_NAME}"
 fi
 
-# ── 5. Update settings.json ──────────────────────────────────
-"$PYTHON" - "$DEST_SETTINGS" "$AUTOSTART_CMD" "$STOP_CMD" "$HOOK_TIMEOUT" "$VARIANT" <<'PYEOF'
+# ── 6. Update settings.json ──────────────────────────────────
+"$PYTHON" - "$DEST_SETTINGS" "$AUTOSTART_CMD" "$STOP_CMD" "$PRECOMPACT_CMD" "$HOOK_TIMEOUT" <<'PYEOF'
 import json, os, sys
 
 settings_path   = sys.argv[1]
 autostart_cmd   = sys.argv[2]
 stop_cmd        = sys.argv[3]
-hook_timeout    = int(sys.argv[4])
-variant         = sys.argv[5]
+precompact_cmd  = sys.argv[4]
+hook_timeout    = int(sys.argv[5])
 
 if os.path.exists(settings_path):
     with open(settings_path) as f:
@@ -215,61 +254,30 @@ else:
 
 hooks = settings.setdefault("hooks", {})
 
-# --- UserPromptSubmit: autostart hook (both variants) ---
-ups = hooks.setdefault("UserPromptSubmit", [])
-autostart_exists = False
-for matcher in ups:
-    for h in matcher.get("hooks", []):
-        if h.get("command") == autostart_cmd:
-            autostart_exists = True
-            break
+hook_configs = [
+    ("UserPromptSubmit", autostart_cmd, hook_timeout),
+    ("Stop", stop_cmd, 5000),
+    ("PreCompact", precompact_cmd, 5000),
+]
 
-if not autostart_exists:
-    entry = {"command": autostart_cmd, "timeout": hook_timeout, "type": "command"}
-    if ups:
-        ups[0].setdefault("hooks", []).append(entry)
-    else:
-        ups.append({"hooks": [entry]})
-    print("[tracecraft]  Added autostart hook to settings.json")
-else:
-    print("[tracecraft]  Autostart hook already in settings.json (skipped)")
-
-# --- Stop: silent flag-setter (test variant only) ---
-stop_commands = {stop_cmd, stop_cmd.replace("sh ", "bash ", 1)}
-
-if variant == "test":
-    stop_hooks = hooks.get("Stop", [])
-    stop_exists = False
-    for matcher in stop_hooks:
+for event, cmd, timeout in hook_configs:
+    matchers = hooks.setdefault(event, [])
+    exists = False
+    for matcher in matchers:
         for h in matcher.get("hooks", []):
-            if h.get("command") in stop_commands:
-                stop_exists = True
+            if h.get("command") == cmd:
+                exists = True
                 break
 
-    if not stop_exists:
-        entry = {"command": stop_cmd, "timeout": 3000, "type": "command"}
-        if hooks.get("Stop"):
-            hooks["Stop"][0].setdefault("hooks", []).append(entry)
+    if not exists:
+        entry = {"command": cmd, "timeout": timeout, "type": "command"}
+        if matchers:
+            matchers[0].setdefault("hooks", []).append(entry)
         else:
-            hooks["Stop"] = [{"hooks": [entry]}]
-        print("[tracecraft]  Added stop hook to settings.json")
+            matchers.append({"hooks": [entry]})
+        print(f"[tracecraft]  Added {event} hook to settings.json")
     else:
-        print("[tracecraft]  Stop hook already in settings.json (skipped)")
-else:
-    # main variant: remove stop hook entries
-    removed = False
-    for matcher in hooks.get("Stop", []):
-        original = matcher.get("hooks", [])
-        filtered = [h for h in original if h.get("command") not in stop_commands]
-        if len(filtered) < len(original):
-            removed = True
-            matcher["hooks"] = filtered
-
-    if removed:
-        hooks["Stop"] = [m for m in hooks.get("Stop", []) if m.get("hooks")]
-        if not hooks["Stop"]:
-            del hooks["Stop"]
-        print("[tracecraft]  Removed stop hook from settings.json")
+        print(f"[tracecraft]  {event} hook already in settings.json (skipped)")
 
 with open(settings_path, "w") as f:
     json.dump(settings, f, indent=2, ensure_ascii=False)
@@ -278,11 +286,10 @@ with open(settings_path, "w") as f:
 PYEOF
 
 printf '\n'
-info "Installation complete (variant: ${VARIANT})."
-if [ "$VARIANT" = "test" ]; then
-    info "Deferred auto-checkpoint: journals updated at the start of each turn."
-    info "Switch back with: sh install.sh --variant main"
-else
-    info "Original behavior: manual /tracecraft finalize required."
-    info "Try the test variant: sh install.sh --variant test"
-fi
+info "Installation complete."
+info "Config: ${CONFIG_FILE}"
+info "  TRACECRAFT_MODEL=${FINAL_MODEL}"
+info "  TRACECRAFT_TIMING=${FINAL_TIMING}"
+info "  TRACECRAFT_LOCK_TIMEOUT=${FINAL_LOCK_TIMEOUT}"
+printf '\n'
+info "Edit ${CONFIG_FILE} to change settings (no reinstall needed)."

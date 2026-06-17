@@ -10,7 +10,9 @@ set -eu
 # ── Configuration ──────────────────────────────────────────────
 AUTOSTART_HOOK="tracecraft-autostart.sh"
 STOP_HOOK="tracecraft-stop.sh"
+PRECOMPACT_HOOK="tracecraft-precompact.sh"
 SKILL_FILE="tracecraft.md"
+CONFIG_FILE="$HOME/.tracecraft-config"
 
 # ── Helpers ────────────────────────────────────────────────────
 info() { printf '[tracecraft]  %s\n' "$1"; }
@@ -89,46 +91,33 @@ import json, sys
 
 settings_path = sys.argv[1]
 
-autostart_commands = {
-    "sh ~/.claude/hooks/tracecraft-autostart.sh",
-    "bash ~/.claude/hooks/tracecraft-autostart.sh",
-    "sh .claude/hooks/tracecraft-autostart.sh",
-    "bash .claude/hooks/tracecraft-autostart.sh",
-}
-
-stop_commands = {
-    "sh ~/.claude/hooks/tracecraft-stop.sh",
-    "bash ~/.claude/hooks/tracecraft-stop.sh",
-    "sh .claude/hooks/tracecraft-stop.sh",
-    "bash .claude/hooks/tracecraft-stop.sh",
-}
+tracecraft_commands = set()
+for hook_name in ["tracecraft-autostart.sh", "tracecraft-stop.sh", "tracecraft-precompact.sh"]:
+    for prefix in ["sh ~/.claude/hooks/", "bash ~/.claude/hooks/",
+                    "sh .claude/hooks/", "bash .claude/hooks/"]:
+        tracecraft_commands.add(prefix + hook_name)
 
 with open(settings_path) as f:
     settings = json.load(f)
 
 hooks = settings.get("hooks", {})
 
-removed_autostart = False
-for matcher in hooks.get("UserPromptSubmit", []):
-    original = matcher.get("hooks", [])
-    filtered = [h for h in original if h.get("command") not in autostart_commands]
-    if len(filtered) < len(original):
-        removed_autostart = True
-        matcher["hooks"] = filtered
-
-removed_stop = False
-for matcher in hooks.get("Stop", []):
-    original = matcher.get("hooks", [])
-    filtered = [h for h in original if h.get("command") not in stop_commands]
-    if len(filtered) < len(original):
-        removed_stop = True
-        matcher["hooks"] = filtered
-
-for event in ["UserPromptSubmit", "Stop"]:
-    if event in hooks:
-        hooks[event] = [m for m in hooks[event] if m.get("hooks")]
+for event in ["UserPromptSubmit", "Stop", "PreCompact"]:
+    removed = False
+    for matcher in hooks.get(event, []):
+        original = matcher.get("hooks", [])
+        filtered = [h for h in original if h.get("command") not in tracecraft_commands]
+        if len(filtered) < len(original):
+            removed = True
+            matcher["hooks"] = filtered
+    if removed:
+        hooks[event] = [m for m in hooks.get(event, []) if m.get("hooks")]
         if not hooks[event]:
             del hooks[event]
+        print(f"[tracecraft]  Removed {event} hook from settings.json")
+    else:
+        print(f"[tracecraft]  No {event} hook found in settings.json (skipped)")
+
 if not hooks:
     del settings["hooks"]
 
@@ -136,22 +125,13 @@ with open(settings_path, "w") as f:
     json.dump(settings, f, indent=2, ensure_ascii=False)
     f.write("\n")
 
-if removed_autostart:
-    print("[tracecraft]  Removed autostart hook from settings.json")
-else:
-    print("[tracecraft]  No autostart hook found in settings.json (skipped)")
-
-if removed_stop:
-    print("[tracecraft]  Removed stop hook from settings.json")
-else:
-    print("[tracecraft]  No stop hook found in settings.json (skipped)")
 PYEOF
 else
     skip "No settings.json found at ${DEST_SETTINGS}"
 fi
 
 # ── 2. Remove hook scripts ──────────────────────────────────
-for hook in "$AUTOSTART_HOOK" "$STOP_HOOK"; do
+for hook in "$AUTOSTART_HOOK" "$STOP_HOOK" "$PRECOMPACT_HOOK"; do
     if [ -f "${DEST_HOOKS}/${hook}" ]; then
         rm "${DEST_HOOKS}/${hook}"
         info "Removed hook script: ${DEST_HOOKS}/${hook}"
@@ -166,20 +146,29 @@ if [ "$SCOPE" = "project" ]; then
     if [ -f "$DEST_SKILL" ]; then
         rm "$DEST_SKILL"
         info "Removed skill definition: ${DEST_SKILL}"
-    else
-        skip "Skill definition not found at ${DEST_SKILL}"
     fi
 fi
 
-# ── 4. Clean up temp files ───────────────────────────────────
-if [ -d "/tmp/tracecraft-checkpoint" ]; then
-    rm -rf "/tmp/tracecraft-checkpoint"
-    info "Cleaned up temp files: /tmp/tracecraft-checkpoint"
+# ── 4. Remove config file ───────────────────────────────────
+if [ -f "$CONFIG_FILE" ]; then
+    rm "$CONFIG_FILE"
+    info "Removed config: ${CONFIG_FILE}"
+else
+    skip "No config file at ${CONFIG_FILE}"
 fi
-if [ -d "/tmp/tracecraft-stop" ]; then
-    rm -rf "/tmp/tracecraft-stop"
-    info "Cleaned up temp files: /tmp/tracecraft-stop"
-fi
+
+# ── 5. Clean up temp files ───────────────────────────────────
+for tmpdir in \
+    "/tmp/tracecraft-checkpoint" \
+    "/tmp/tracecraft-checkpoint-lock" \
+    "/tmp/tracecraft-checkpoint-done" \
+    "/tmp/tracecraft-interval" \
+    "/tmp/tracecraft-stop"; do
+    if [ -d "$tmpdir" ]; then
+        rm -rf "$tmpdir"
+        info "Cleaned up: ${tmpdir}"
+    fi
+done
 
 printf '\n'
 info "Uninstallation complete."
