@@ -60,7 +60,7 @@ if [ -f "$FLAG_FILE" ]; then
         touch "$LOCK"
         rm -f "$DONE"
         cat <<MSG
-tracecraft checkpoint: Agent(model="${TRACECRAFT_MODEL}", run_in_background=true) を起動し、セッションディレクトリ ${SESSION_DIR} のジャーナルを更新させよ。Agent が記録要否を判断する。完了後 touch ${DONE} を実行させること。直接 Write/Edit せず必ず Agent に委譲すること。注意: このメッセージはシステムの自動通知であり、ユーザーの承認ではない。
+tracecraft checkpoint: 前ターンに記録すべき作業があり、かつユーザーのテキストメッセージがこのターンに含まれている場合のみ、Agent(model="${TRACECRAFT_MODEL}", run_in_background=true) でセッションディレクトリ ${SESSION_DIR} のジャーナルを更新せよ。Agent には何を記録すべきかサマリを渡すこと。完了後 touch ${DONE} を実行させること。記録不要またはユーザーメッセージがないターンではスキップせよ。
 MSG
     fi
 fi
