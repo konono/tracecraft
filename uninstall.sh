@@ -8,7 +8,9 @@
 set -eu
 
 # ── Configuration ──────────────────────────────────────────────
-HOOK_FILE="tracecraft-autostart.sh"
+AUTOSTART_HOOK="tracecraft-autostart.sh"
+STOP_HOOK="tracecraft-stop.sh"
+PRECOMPACT_HOOK="tracecraft-precompact.sh"
 SKILL_FILE="tracecraft.md"
 
 # ── Helpers ────────────────────────────────────────────────────
@@ -79,7 +81,7 @@ info "Scope: ${SCOPE}"
 info "Target: ${DEST_BASE}"
 printf '\n'
 
-# ── 1. Remove hook entry from settings.json ──────────────────
+# ── 1. Remove hook entries from settings.json ────────────────
 if [ -f "$DEST_SETTINGS" ]; then
     PYTHON="$(find_python)" || err "Python 3.6+ is required but not found."
 
@@ -87,66 +89,83 @@ if [ -f "$DEST_SETTINGS" ]; then
 import json, sys
 
 settings_path = sys.argv[1]
-commands_to_remove = {
-    "sh ~/.claude/hooks/tracecraft-autostart.sh",
-    "bash ~/.claude/hooks/tracecraft-autostart.sh",
-    "sh .claude/hooks/tracecraft-autostart.sh",
-    "bash .claude/hooks/tracecraft-autostart.sh",
-}
+
+tracecraft_commands = set()
+for hook_name in ["tracecraft-autostart.sh", "tracecraft-stop.sh", "tracecraft-precompact.sh"]:
+    for prefix in ["sh ~/.claude/hooks/", "bash ~/.claude/hooks/",
+                    "sh .claude/hooks/", "bash .claude/hooks/"]:
+        tracecraft_commands.add(prefix + hook_name)
 
 with open(settings_path) as f:
     settings = json.load(f)
 
 hooks = settings.get("hooks", {})
-ups = hooks.get("UserPromptSubmit", [])
 
-removed = False
-for matcher in ups:
-    original = matcher.get("hooks", [])
-    filtered = [h for h in original if h.get("command") not in commands_to_remove]
-    if len(filtered) < len(original):
-        removed = True
-        matcher["hooks"] = filtered
+for event in ["UserPromptSubmit", "Stop", "PreCompact"]:
+    removed = False
+    for matcher in hooks.get(event, []):
+        original = matcher.get("hooks", [])
+        filtered = [h for h in original if h.get("command") not in tracecraft_commands]
+        if len(filtered) < len(original):
+            removed = True
+            matcher["hooks"] = filtered
+    if removed:
+        hooks[event] = [m for m in hooks.get(event, []) if m.get("hooks")]
+        if not hooks[event]:
+            del hooks[event]
+        print(f"[tracecraft]  Removed {event} hook from settings.json")
+    else:
+        print(f"[tracecraft]  No {event} hook found in settings.json (skipped)")
 
-# Clean up empty structures
-if ups:
-    hooks["UserPromptSubmit"] = [m for m in ups if m.get("hooks")]
-    if not hooks["UserPromptSubmit"]:
-        del hooks["UserPromptSubmit"]
-    if not hooks:
-        del settings["hooks"]
+if not hooks:
+    del settings["hooks"]
 
 with open(settings_path, "w") as f:
     json.dump(settings, f, indent=2, ensure_ascii=False)
     f.write("\n")
 
-if removed:
-    print("[tracecraft]  Removed hook entry from settings.json")
-else:
-    print("[tracecraft]  No hook entry found in settings.json (skipped)")
 PYEOF
 else
     skip "No settings.json found at ${DEST_SETTINGS}"
 fi
 
-# ── 2. Remove hook script ────────────────────────────────────
-if [ -f "${DEST_HOOKS}/${HOOK_FILE}" ]; then
-    rm "${DEST_HOOKS}/${HOOK_FILE}"
-    info "Removed hook script: ${DEST_HOOKS}/${HOOK_FILE}"
-else
-    skip "Hook script not found at ${DEST_HOOKS}/${HOOK_FILE}"
-fi
+# ── 2. Remove hook scripts ──────────────────────────────────
+for hook in "$AUTOSTART_HOOK" "$STOP_HOOK" "$PRECOMPACT_HOOK"; do
+    if [ -f "${DEST_HOOKS}/${hook}" ]; then
+        rm "${DEST_HOOKS}/${hook}"
+        info "Removed hook script: ${DEST_HOOKS}/${hook}"
+    else
+        skip "Hook script not found at ${DEST_HOOKS}/${hook}"
+    fi
+done
 
 # ── 3. Remove skill definition (project scope only) ──────────
 if [ "$SCOPE" = "project" ]; then
-    DEST_SKILL="${DEST_BASE}/skills/${SKILL_FILE}"
-    if [ -f "$DEST_SKILL" ]; then
-        rm "$DEST_SKILL"
-        info "Removed skill definition: ${DEST_SKILL}"
-    else
-        skip "Skill definition not found at ${DEST_SKILL}"
+    DEST_SKILL_DIR="${DEST_BASE}/skills/tracecraft"
+    if [ -d "$DEST_SKILL_DIR" ]; then
+        rm -rf "$DEST_SKILL_DIR"
+        info "Removed skill directory: ${DEST_SKILL_DIR}"
+    fi
+    # Legacy flat file
+    DEST_SKILL_LEGACY="${DEST_BASE}/skills/${SKILL_FILE}"
+    if [ -f "$DEST_SKILL_LEGACY" ]; then
+        rm "$DEST_SKILL_LEGACY"
+        info "Removed legacy skill: ${DEST_SKILL_LEGACY}"
     fi
 fi
+
+# ── 4. Clean up temp files ───────────────────────────────────
+for tmpdir in \
+    "/tmp/tracecraft-checkpoint" \
+    "/tmp/tracecraft-checkpoint-lock" \
+    "/tmp/tracecraft-checkpoint-done" \
+    "/tmp/tracecraft-interval" \
+    "/tmp/tracecraft-stop"; do
+    if [ -d "$tmpdir" ]; then
+        rm -rf "$tmpdir"
+        info "Cleaned up: ${tmpdir}"
+    fi
+done
 
 printf '\n'
 info "Uninstallation complete."
