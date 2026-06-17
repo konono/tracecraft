@@ -60,19 +60,7 @@ if [ -f "$FLAG_FILE" ]; then
         touch "$LOCK"
         rm -f "$DONE"
         cat <<MSG
-tracecraft checkpoint: 前ターンの作業内容を記録してください。以下の手順で行うこと:
-
-1. 直前のターン（このメッセージの直前のユーザーへの応答）で行った作業・調査・判断を簡潔にサマリする
-2. Agent ツールを run_in_background=true, model="${TRACECRAFT_MODEL}" で起動し、以下を指示する:
-   - セッションディレクトリ: ${SESSION_DIR}
-   - サマリの内容を worklog.md に新しい Step として追記する
-   - 調査結果があれば findings.md に、判断があれば decisions.md に、問題があれば troubleshooting.md に追記する
-   - finalize（final-guide.md / retrospective.md の再生成）は不要。ソースファイルへの追記のみ行うこと
-   - 完了後、以下のコマンドを Bash ツールで実行すること: touch ${DONE}
-3. Agent 起動後、すぐにユーザーの現在のメッセージの処理に進むこと。Agent の完了を待たないこと。
-
-重要: 直接 Write/Edit でジャーナルファイルを書かないこと。必ず Agent に委譲すること。
-重要: Agent は model="${TRACECRAFT_MODEL}" で起動すること。
+tracecraft checkpoint: Agent(model="${TRACECRAFT_MODEL}", run_in_background=true) を起動し、セッションディレクトリ ${SESSION_DIR} のジャーナルを更新させよ。Agent が記録要否を判断する。完了後 touch ${DONE} を実行させること。直接 Write/Edit せず必ず Agent に委譲すること。
 MSG
     fi
 fi
