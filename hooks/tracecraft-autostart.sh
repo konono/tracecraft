@@ -34,7 +34,7 @@ if [ -f "$FLAG_FILE" ]; then
 tracecraft checkpoint: 前ターンの作業内容を記録してください。以下の手順で行うこと:
 
 1. 直前のターン（このメッセージの直前のユーザーへの応答）で行った作業・調査・判断を簡潔にサマリする
-2. Agent ツールを run_in_background=true, model="sonnet" で起動し、以下を指示する:
+2. Agent ツールを run_in_background=true, model="haiku" で起動し、以下を指示する:
    - セッションディレクトリ: ${SESSION_DIR}
    - サマリの内容を worklog.md / findings.md / troubleshooting.md / decisions.md に追記
    - 4つのソースファイルを読み込み、final-guide.md と retrospective.md を再生成
@@ -42,7 +42,7 @@ tracecraft checkpoint: 前ターンの作業内容を記録してください。
 3. Agent 起動後、すぐにユーザーの現在のメッセージの処理に進むこと。Agent の完了を待たないこと。
 
 重要: 直接 Write/Edit でジャーナルファイルを書かないこと。必ず Agent に委譲すること。
-重要: Agent は model="sonnet" で起動すること（高速化のため）。
+重要: Agent は model="haiku" で起動すること（高速化のため）。
 MSG
     fi
 fi

@@ -108,7 +108,7 @@ hook がインストールされていない環境で、ユーザーが作業の
 
 1. Stop hook（exit 0、不可視）がターン終了時にフラグファイルを設置する
 2. 次のターンの UserPromptSubmit hook がフラグを検出し、Claude にチェックポイントを指示する
-3. Claude は前ターンの作業内容をサマリにまとめ、Agent ツール（`run_in_background=true`, `model="sonnet"`）を起動する
+3. Claude は前ターンの作業内容をサマリにまとめ、Agent ツール（`run_in_background=true`, `model="haiku"`）を起動する
 4. バックグラウンド Agent がジャーナルファイルの更新と finalize を実行する
 5. ユーザーの会話履歴には Agent の1行だけが表示される
 
