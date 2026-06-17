@@ -18,7 +18,6 @@ HOOK_TIMEOUT=3000
 SKILL_DIR="tracecraft"
 SKILL_FILE="SKILL.md"
 CLI_NAME="tracecraft"
-CONFIG_FILE="$HOME/.tracecraft-config"
 
 # ── Resolve source paths ──────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -45,15 +44,10 @@ find_python() {
     return 1
 }
 
-# ── Load existing config defaults ─────────────────────────────
+# ── Read existing settings from installed hooks ──────────────
 EXISTING_MODEL=""
 EXISTING_TIMING=""
 EXISTING_LOCK_TIMEOUT=""
-if [ -f "$CONFIG_FILE" ]; then
-    EXISTING_MODEL=$(grep '^TRACECRAFT_MODEL=' "$CONFIG_FILE" 2>/dev/null | cut -d= -f2 || true)
-    EXISTING_TIMING=$(grep '^TRACECRAFT_TIMING=' "$CONFIG_FILE" 2>/dev/null | cut -d= -f2 || true)
-    EXISTING_LOCK_TIMEOUT=$(grep '^TRACECRAFT_LOCK_TIMEOUT=' "$CONFIG_FILE" 2>/dev/null | cut -d= -f2 || true)
-fi
 
 # ── Argument parsing ──────────────────────────────────────────
 SCOPE=""
@@ -177,32 +171,23 @@ info "Lock timeout: ${FINAL_LOCK_TIMEOUT}s"
 info "Destination: ${DEST_BASE}"
 printf '\n'
 
-# ── 1. Write config file ────────────────────────────────────
-cat > "$CONFIG_FILE" <<CONF
-TRACECRAFT_MODEL=${FINAL_MODEL}
-TRACECRAFT_TIMING=${FINAL_TIMING}
-TRACECRAFT_LOCK_TIMEOUT=${FINAL_LOCK_TIMEOUT}
-CONF
-info "Config written -> ${CONFIG_FILE}"
-
-# ── 2. Install hook scripts ──────────────────────────────────
+# ── 1. Install hook scripts (with settings baked in) ─────────
 mkdir -p "$DEST_HOOKS"
 
-for src_dst in \
-    "${SOURCE_AUTOSTART}:${DEST_HOOKS}/${AUTOSTART_HOOK}:Autostart" \
-    "${SOURCE_STOP}:${DEST_HOOKS}/${STOP_HOOK}:Stop" \
-    "${SOURCE_PRECOMPACT}:${DEST_HOOKS}/${PRECOMPACT_HOOK}:PreCompact"; do
-    src=$(echo "$src_dst" | cut -d: -f1)
-    dst=$(echo "$src_dst" | cut -d: -f2)
-    label=$(echo "$src_dst" | cut -d: -f3)
-    if [ -f "$dst" ] && cmp -s "$src" "$dst"; then
-        skip "${label} hook already up to date"
-    else
-        cp "$src" "$dst"
-        chmod +x "$dst"
-        info "Installed ${label} hook -> ${dst}"
-    fi
-done
+install_hook() {
+    _src="$1"; _dst="$2"; _label="$3"
+    sed \
+        -e "s/^TRACECRAFT_MODEL=.*/TRACECRAFT_MODEL=${FINAL_MODEL}/" \
+        -e "s/^TRACECRAFT_TIMING=.*/TRACECRAFT_TIMING=${FINAL_TIMING}/" \
+        -e "s/^TRACECRAFT_LOCK_TIMEOUT=.*/TRACECRAFT_LOCK_TIMEOUT=${FINAL_LOCK_TIMEOUT}/" \
+        "$_src" > "$_dst"
+    chmod +x "$_dst"
+    info "Installed ${_label} hook -> ${_dst}"
+}
+
+install_hook "$SOURCE_AUTOSTART" "${DEST_HOOKS}/${AUTOSTART_HOOK}" "Autostart"
+install_hook "$SOURCE_STOP" "${DEST_HOOKS}/${STOP_HOOK}" "Stop"
+install_hook "$SOURCE_PRECOMPACT" "${DEST_HOOKS}/${PRECOMPACT_HOOK}" "PreCompact"
 
 # ── 3. Clean up legacy paths ─────────────────────────────────
 for legacy in \
@@ -287,9 +272,8 @@ PYEOF
 
 printf '\n'
 info "Installation complete."
-info "Config: ${CONFIG_FILE}"
 info "  TRACECRAFT_MODEL=${FINAL_MODEL}"
 info "  TRACECRAFT_TIMING=${FINAL_TIMING}"
 info "  TRACECRAFT_LOCK_TIMEOUT=${FINAL_LOCK_TIMEOUT}"
 printf '\n'
-info "Edit ${CONFIG_FILE} to change settings (no reinstall needed)."
+info "To change settings, re-run install.sh with --timing/--model/--lock-timeout."

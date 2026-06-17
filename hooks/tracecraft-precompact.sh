@@ -1,7 +1,7 @@
 #!/bin/sh
 # tracecraft-precompact.sh — PreCompact hook: set checkpoint flag before context compression
 #
-# Only active when TRACECRAFT_TIMING=precompact in ~/.tracecraft-config.
+# Only active when TRACECRAFT_TIMING=precompact (set by install.sh).
 # Sets the same flag file as tracecraft-stop.sh, picked up by tracecraft-autostart.sh
 # on the next turn (post-compression).
 
@@ -11,11 +11,10 @@
 [ -f ".claude/skills/tracecraft/SKILL.md" ] || \
 [ -f "$HOME/.claude/skills/tracecraft/SKILL.md" ] || exit 0
 
-# Load config
+# Settings (replaced by install.sh)
 TRACECRAFT_MODEL=haiku
 TRACECRAFT_TIMING=every
 TRACECRAFT_LOCK_TIMEOUT=90
-[ -f "$HOME/.tracecraft-config" ] && . "$HOME/.tracecraft-config"
 
 # Only act when timing=precompact
 [ "$TRACECRAFT_TIMING" = "precompact" ] || exit 0

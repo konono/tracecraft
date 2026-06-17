@@ -1,7 +1,7 @@
 #!/bin/sh
 # tracecraft-stop.sh — Stop hook: set checkpoint flag (non-blocking, silent)
 #
-# Behavior depends on TRACECRAFT_TIMING in ~/.tracecraft-config:
+# Behavior depends on TRACECRAFT_TIMING (set by install.sh):
 #   every       — set flag on every turn (default)
 #   off         — do nothing
 #   precompact  — do nothing (PreCompact hook handles it)
@@ -13,11 +13,10 @@
 [ -f ".claude/skills/tracecraft/SKILL.md" ] || \
 [ -f "$HOME/.claude/skills/tracecraft/SKILL.md" ] || exit 0
 
-# Load config
+# Settings (replaced by install.sh)
 TRACECRAFT_MODEL=haiku
 TRACECRAFT_TIMING=every
 TRACECRAFT_LOCK_TIMEOUT=90
-[ -f "$HOME/.tracecraft-config" ] && . "$HOME/.tracecraft-config"
 
 case "$TRACECRAFT_TIMING" in
     off|precompact) exit 0 ;;

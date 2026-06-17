@@ -10,11 +10,10 @@ INPUT=$(cat)
 
 [ -f ".claude/skills/tracecraft/SKILL.md" ] || [ -f "$HOME/.claude/skills/tracecraft/SKILL.md" ] || exit 0
 
-# Load config
+# Settings (replaced by install.sh)
 TRACECRAFT_MODEL=haiku
 TRACECRAFT_TIMING=every
 TRACECRAFT_LOCK_TIMEOUT=90
-[ -f "$HOME/.tracecraft-config" ] && . "$HOME/.tracecraft-config"
 
 # session_id を取得（先頭8文字を短縮IDとして使用）
 SESSION_ID=$(echo "$INPUT" | grep -o '"session_id":"[^"]*"' | cut -d'"' -f4 | cut -c1-8)

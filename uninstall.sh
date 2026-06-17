@@ -12,7 +12,6 @@ AUTOSTART_HOOK="tracecraft-autostart.sh"
 STOP_HOOK="tracecraft-stop.sh"
 PRECOMPACT_HOOK="tracecraft-precompact.sh"
 SKILL_FILE="tracecraft.md"
-CONFIG_FILE="$HOME/.tracecraft-config"
 
 # ── Helpers ────────────────────────────────────────────────────
 info() { printf '[tracecraft]  %s\n' "$1"; }
@@ -149,15 +148,7 @@ if [ "$SCOPE" = "project" ]; then
     fi
 fi
 
-# ── 4. Remove config file ───────────────────────────────────
-if [ -f "$CONFIG_FILE" ]; then
-    rm "$CONFIG_FILE"
-    info "Removed config: ${CONFIG_FILE}"
-else
-    skip "No config file at ${CONFIG_FILE}"
-fi
-
-# ── 5. Clean up temp files ───────────────────────────────────
+# ── 4. Clean up temp files ───────────────────────────────────
 for tmpdir in \
     "/tmp/tracecraft-checkpoint" \
     "/tmp/tracecraft-checkpoint-lock" \
