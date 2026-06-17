@@ -11,10 +11,10 @@
 [ -f ".claude/skills/tracecraft/SKILL.md" ] || \
 [ -f "$HOME/.claude/skills/tracecraft/SKILL.md" ] || exit 0
 
-# Settings (replaced by install.sh)
-TRACECRAFT_MODEL=haiku
-TRACECRAFT_TIMING=every
-TRACECRAFT_LOCK_TIMEOUT=90
+# Settings (rendered by install.sh)
+TRACECRAFT_MODEL=__TRACECRAFT_MODEL__
+TRACECRAFT_TIMING=__TRACECRAFT_TIMING__
+TRACECRAFT_LOCK_TIMEOUT=__TRACECRAFT_LOCK_TIMEOUT__
 
 # Only act when timing=precompact
 [ "$TRACECRAFT_TIMING" = "precompact" ] || exit 0

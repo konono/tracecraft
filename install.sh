@@ -177,9 +177,9 @@ mkdir -p "$DEST_HOOKS"
 install_hook() {
     _src="$1"; _dst="$2"; _label="$3"
     sed \
-        -e "s/^TRACECRAFT_MODEL=.*/TRACECRAFT_MODEL=${FINAL_MODEL}/" \
-        -e "s/^TRACECRAFT_TIMING=.*/TRACECRAFT_TIMING=${FINAL_TIMING}/" \
-        -e "s/^TRACECRAFT_LOCK_TIMEOUT=.*/TRACECRAFT_LOCK_TIMEOUT=${FINAL_LOCK_TIMEOUT}/" \
+        -e "s/__TRACECRAFT_MODEL__/${FINAL_MODEL}/g" \
+        -e "s/__TRACECRAFT_TIMING__/${FINAL_TIMING}/g" \
+        -e "s/__TRACECRAFT_LOCK_TIMEOUT__/${FINAL_LOCK_TIMEOUT}/g" \
         "$_src" > "$_dst"
     chmod +x "$_dst"
     info "Installed ${_label} hook -> ${_dst}"
