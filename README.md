@@ -2,7 +2,7 @@
 
 > Record how AI got there, not just what it built.
 
-A structured journaling skill for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) that captures the full reasoning process — investigations, hypotheses, failures, and decisions — as reviewable, reproducible documents.
+A structured journaling skill for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [opencode](https://opencode.ai/) that captures the full reasoning process — investigations, hypotheses, failures, and decisions — as reviewable, reproducible documents.
 
 ## Why
 
@@ -30,30 +30,33 @@ Each session generates a structured journal under `.tracecraft/`:
 
 ## Installation
 
+### Claude Code
+
 Requires Python 3.6+ and [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
 
-### Global (all projects)
-
 ```sh
-sh install.sh --global
-```
-
-### Project-specific
-
-```sh
-sh install.sh --project
-```
-
-### Interactive
-
-```sh
-sh install.sh
+sh install.sh --global    # all projects
+sh install.sh --project   # current project only
+sh install.sh             # interactive
 ```
 
 The installer:
 1. Copies the hook script to `.claude/hooks/`
 2. Copies the skill definition to `.claude/skills/` (project scope only)
 3. Registers the `UserPromptSubmit` hook in `.claude/settings.json`
+
+### opencode
+
+Requires [opencode](https://opencode.ai/).
+
+```sh
+sh install.sh --opencode --global    # all projects (~/.config/opencode/)
+sh install.sh --opencode --project   # current project only (.opencode/)
+```
+
+The installer:
+1. Copies the skill definition to `skills/tracecraft/SKILL.md`
+2. Copies the custom command to `commands/tracecraft.md`
 
 ## Usage
 
@@ -82,7 +85,10 @@ Run `/tracecraft` at the end of a session to generate all journal files at once 
 ## Uninstallation
 
 ```sh
-sh uninstall.sh --global   # or --project
+sh uninstall.sh --global              # Claude Code global
+sh uninstall.sh --project             # Claude Code project
+sh uninstall.sh --opencode --global   # opencode global
+sh uninstall.sh --opencode --project  # opencode project
 ```
 
 ## License

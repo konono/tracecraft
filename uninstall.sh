@@ -33,16 +33,19 @@ find_python() {
 # ── Argument parsing ──────────────────────────────────────────
 SCOPE=""
 TARGET=""
+PLATFORM=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --global)  SCOPE="global";  shift ;;
         --project) SCOPE="project"; shift ;;
+        --opencode) PLATFORM="opencode"; shift ;;
         --target)
             [ $# -ge 2 ] || err "--target requires a path argument"
             TARGET="$2"; shift 2 ;;
         -h|--help)
-            printf 'Usage: sh uninstall.sh [--global | --project [--target <path>]]\n'
+            printf 'Usage: sh uninstall.sh [--global | --project [--target <path>]] [--opencode]\n'
+            printf '\n  --opencode   Uninstall opencode integration\n'
             exit 0 ;;
         *) err "Unknown option: $1" ;;
     esac
@@ -62,6 +65,48 @@ if [ -z "$SCOPE" ]; then
     esac
 fi
 
+# ── opencode uninstall path ──────────────────────────────────
+if [ "$PLATFORM" = "opencode" ]; then
+    if [ "$SCOPE" = "global" ]; then
+        OC_BASE="${HOME}/.config/opencode"
+    else
+        if [ -n "$TARGET" ]; then
+            OC_BASE="${TARGET}/.opencode"
+        else
+            OC_BASE=".opencode"
+        fi
+    fi
+
+    printf '\n'
+    info "Platform: opencode"
+    info "Scope: ${SCOPE}"
+    info "Target: ${OC_BASE}"
+    printf '\n'
+
+    # Remove skill
+    OC_SKILL_DIR="${OC_BASE}/skills/tracecraft"
+    if [ -d "$OC_SKILL_DIR" ]; then
+        rm -rf "$OC_SKILL_DIR"
+        info "Removed skill directory: ${OC_SKILL_DIR}"
+    else
+        skip "Skill directory not found at ${OC_SKILL_DIR}"
+    fi
+
+    # Remove command
+    OC_CMD="${OC_BASE}/commands/tracecraft.md"
+    if [ -f "$OC_CMD" ]; then
+        rm "$OC_CMD"
+        info "Removed command: ${OC_CMD}"
+    else
+        skip "Command not found at ${OC_CMD}"
+    fi
+
+    printf '\n'
+    info "Uninstallation complete (opencode)."
+    exit 0
+fi
+
+# ── Claude Code uninstall path (default) ─────────────────────
 # ── Determine paths ──────────────────────────────────────────
 if [ "$SCOPE" = "global" ]; then
     DEST_BASE="${HOME}/.claude"
@@ -77,6 +122,7 @@ DEST_HOOKS="${DEST_BASE}/hooks"
 DEST_SETTINGS="${DEST_BASE}/settings.json"
 
 printf '\n'
+info "Platform: Claude Code"
 info "Scope: ${SCOPE}"
 info "Target: ${DEST_BASE}"
 printf '\n'

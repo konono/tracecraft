@@ -14,6 +14,8 @@ HOOK_TIMEOUT=3000
 SKILL_DIR="tracecraft"
 SKILL_FILE="SKILL.md"
 CLI_NAME="tracecraft"
+OC_SKILL_FILE="SKILL.md"
+OC_COMMAND_FILE="tracecraft.md"
 
 # ── Resolve source paths ──────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -21,6 +23,8 @@ SOURCE_AUTOSTART="${SCRIPT_DIR}/hooks/${AUTOSTART_HOOK}"
 SOURCE_PRECOMPACT="${SCRIPT_DIR}/hooks/${PRECOMPACT_HOOK}"
 SOURCE_SKILL="${SCRIPT_DIR}/.claude/skills/${SKILL_DIR}/${SKILL_FILE}"
 SOURCE_CLI="${SCRIPT_DIR}/bin/${CLI_NAME}"
+SOURCE_OC_SKILL="${SCRIPT_DIR}/.opencode/skills/${SKILL_DIR}/${OC_SKILL_FILE}"
+SOURCE_OC_COMMAND="${SCRIPT_DIR}/.opencode/commands/${OC_COMMAND_FILE}"
 
 # ── Helpers ────────────────────────────────────────────────────
 info() { printf '[tracecraft]  %s\n' "$1"; }
@@ -42,16 +46,19 @@ find_python() {
 # ── Argument parsing ──────────────────────────────────────────
 SCOPE=""
 TARGET=""
+PLATFORM=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --global)  SCOPE="global";  shift ;;
         --project) SCOPE="project"; shift ;;
+        --opencode) PLATFORM="opencode"; shift ;;
         --target)
             [ $# -ge 2 ] || err "--target requires a path argument"
             TARGET="$2"; shift 2 ;;
         -h|--help)
-            printf 'Usage: sh install.sh [--global | --project [--target <path>]]\n'
+            printf 'Usage: sh install.sh [--global | --project [--target <path>]] [--opencode]\n'
+            printf '\n  --opencode   Install for opencode instead of Claude Code\n'
             exit 0 ;;
         *) err "Unknown option: $1" ;;
     esac
@@ -72,6 +79,65 @@ if [ -z "$SCOPE" ]; then
 fi
 
 # ── Determine destination paths ───────────────────────────────
+if [ "$PLATFORM" = "opencode" ]; then
+    # opencode installation
+    if [ "$SCOPE" = "global" ]; then
+        OC_BASE="${HOME}/.config/opencode"
+    else
+        if [ -n "$TARGET" ]; then
+            OC_BASE="${TARGET}/.opencode"
+        else
+            OC_BASE=".opencode"
+        fi
+    fi
+
+    [ -f "$SOURCE_OC_SKILL" ] || err "OpenCode skill source not found: ${SOURCE_OC_SKILL}"
+    [ -f "$SOURCE_OC_COMMAND" ] || err "OpenCode command source not found: ${SOURCE_OC_COMMAND}"
+    [ -f "$SOURCE_CLI" ] || err "CLI source not found: ${SOURCE_CLI}"
+
+    printf '\n'
+    info "Platform: opencode"
+    info "Scope: ${SCOPE}"
+    info "Destination: ${OC_BASE}"
+    printf '\n'
+
+    # ── Install opencode skill ──────────────────────────────
+    OC_SKILL_DIR="${OC_BASE}/skills/${SKILL_DIR}"
+    mkdir -p "$OC_SKILL_DIR"
+    if [ -f "${OC_SKILL_DIR}/${OC_SKILL_FILE}" ] && cmp -s "$SOURCE_OC_SKILL" "${OC_SKILL_DIR}/${OC_SKILL_FILE}"; then
+        skip "Skill definition already up to date"
+    else
+        cp "$SOURCE_OC_SKILL" "${OC_SKILL_DIR}/${OC_SKILL_FILE}"
+        info "Installed skill definition -> ${OC_SKILL_DIR}/${OC_SKILL_FILE}"
+    fi
+
+    # ── Install opencode command ────────────────────────────
+    OC_CMD_DIR="${OC_BASE}/commands"
+    mkdir -p "$OC_CMD_DIR"
+    if [ -f "${OC_CMD_DIR}/${OC_COMMAND_FILE}" ] && cmp -s "$SOURCE_OC_COMMAND" "${OC_CMD_DIR}/${OC_COMMAND_FILE}"; then
+        skip "Command already up to date"
+    else
+        cp "$SOURCE_OC_COMMAND" "${OC_CMD_DIR}/${OC_COMMAND_FILE}"
+        info "Installed command -> ${OC_CMD_DIR}/${OC_COMMAND_FILE}"
+    fi
+
+    # ── Install CLI ─────────────────────────────────────────
+    DEST_BIN="${HOME}/.local/bin"
+    mkdir -p "$DEST_BIN"
+    if [ -f "${DEST_BIN}/${CLI_NAME}" ] && cmp -s "$SOURCE_CLI" "${DEST_BIN}/${CLI_NAME}"; then
+        skip "CLI already up to date"
+    else
+        cp "$SOURCE_CLI" "${DEST_BIN}/${CLI_NAME}"
+        chmod +x "${DEST_BIN}/${CLI_NAME}"
+        info "Installed CLI -> ${DEST_BIN}/${CLI_NAME}"
+    fi
+
+    printf '\n'
+    info "Installation complete (opencode)."
+    exit 0
+fi
+
+# ── Claude Code installation (default) ───────────────────────
 if [ "$SCOPE" = "global" ]; then
     DEST_BASE="${HOME}/.claude"
     AUTOSTART_CMD="sh ~/.claude/hooks/${AUTOSTART_HOOK}"
@@ -97,6 +163,7 @@ DEST_SETTINGS="${DEST_BASE}/settings.json"
 PYTHON="$(find_python)" || err "Python 3.6+ is required but not found. Install python3 and retry."
 
 printf '\n'
+info "Platform: Claude Code"
 info "Scope: ${SCOPE}"
 info "Destination: ${DEST_BASE}"
 printf '\n'
