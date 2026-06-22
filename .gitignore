@@ -1,3 +1,7 @@
 # tracecraft session journals (keep templates only)
 .tracecraft/[0-9]*
 .tracecraft/journal_*
+
+# eval reports (generated output)
+eval/reports/*/
+eval/reports/latest
